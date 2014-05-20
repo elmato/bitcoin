@@ -61,7 +61,18 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
     result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
     Array txs;
     BOOST_FOREACH(const CTransaction&tx, block.vtx)
-        txs.push_back(tx.GetHash().GetHex());
+    {
+      Object tinfo;
+      tinfo.push_back(Pair("txid", tx.GetHash().GetHex()));
+      
+      CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+      ssTx << tx;
+      string strHex = HexStr(ssTx.begin(), ssTx.end());
+
+      tinfo.push_back(Pair("hex", strHex));
+
+      txs.push_back(tinfo);
+    }
     result.push_back(Pair("tx", txs));
     result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
     result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
