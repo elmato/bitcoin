@@ -71,6 +71,68 @@ string AccountFromValue(const Value& value)
     return strAccount;
 }
 
+Value importpubkey(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 3)
+        throw runtime_error(
+            "importpubkey pubkey account rescan\n"
+            "Adds a new Bitcoin address in readonly mode (no privkey).  "
+            "If [account] is specified (recommended), it is added to the address book "
+            "so payments received with the address will be credited to [account].");
+
+    EnsureWalletIsUnlocked();
+
+    vector<unsigned char> vchData = ParseHex(params[0].get_str());
+    CPubKey pubkey(vchData);
+
+    CBitcoinAddress addy(pubkey.GetID());
+    if (!addy.IsValid())
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
+
+    // Parse the account first so we don't generate a key if there's an error
+    string strAccount;
+    if (params.size() > 1)
+        strAccount = AccountFromValue(params[1]);
+    
+    // Whether to perform rescan after import
+    bool fRescan = true;
+    if (params.size() > 2)
+        fRescan = params[2].get_bool();
+
+    CKeyID keyID;
+    addy.GetKeyID(keyID);
+
+    CKey key;
+    key.MakeNewKey(true);
+    
+    {
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+
+        pwalletMain->MarkDirty();
+        pwalletMain->SetAddressBook(keyID, strAccount, "receive");
+
+        // Don't throw error in case a key is already there
+        if (pwalletMain->HaveKey(keyID))
+            return addy.ToString();
+
+        pwalletMain->mapKeyMetadata[keyID].nCreateTime = 1;
+
+        if (!pwalletMain->AddKeyPubKey(key, pubkey))
+            throw JSONRPCError(RPC_WALLET_ERROR, "Error adding key to wallet");
+
+        // whenever a key is imported, we need to scan the whole chain
+        pwalletMain->nTimeFirstKey = 1; // 0 would be considered 'no value'
+
+        if (fRescan) {
+            pwalletMain->ScanForWalletTransactions(chainActive.Genesis(), true);
+        }
+    }
+
+    return addy.ToString();
+}
+
+
+
 Value getnewaddress(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 1)
