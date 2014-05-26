@@ -71,6 +71,30 @@ string AccountFromValue(const Value& value)
     return strAccount;
 }
 
+Value addredeemscript(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 2)
+    {
+        string msg = "addredeemscript <redeemScript> [account]\n"
+            "Add a P2SH address with a specified redeemScript to the wallet.\n"
+            "If [account] is specified, assign address to [account].";
+        throw runtime_error(msg);
+    }
+
+    string strAccount;
+    if (params.size() > 1)
+        strAccount = AccountFromValue(params[1]);
+
+    // Construct using pay-to-script-hash:
+    vector<unsigned char> innerData = ParseHexV(params[0], "redeemScript");
+    CScript inner(innerData.begin(), innerData.end());
+    CScriptID innerID = inner.GetID();
+    pwalletMain->AddCScript(inner);
+
+    pwalletMain->SetAddressBook(innerID, strAccount, "receive");
+    return CBitcoinAddress(innerID).ToString();
+}
+
 Value importpubkey(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 3)
